@@ -1,0 +1,60 @@
+#pragma once
+#include <stdint.h>
+
+typedef enum {
+    ERR_OK = 0,
+    ERR_INVALID_ARGS,
+    ERR_UNAUTHORIZED,
+    ERR_FORBIDDEN,
+    ERR_BUSY,
+    ERR_TIMEOUT,
+    ERR_LOW_BATTERY,
+    ERR_WIFI_UNAVAILABLE,
+    ERR_WIFI_NOT_CONNECTED,
+    ERR_WIFI_CONNECT_FAILED,
+    ERR_SD_NOT_MOUNTED,
+    ERR_NOT_FOUND,
+    ERR_UNSUPPORTED,
+    ERR_INTERNAL,
+    ERR_POLICY_BLOCKED
+} error_code_t;
+
+typedef enum {
+    STATE_BOOTING = 0,
+    STATE_UNPROVISIONED,
+    STATE_PROVISIONING,
+    STATE_CONNECTING,
+    STATE_CONNECTED_IDLE,
+    STATE_CONNECTED_ACTIVE,
+    STATE_SLEEP_PREP,
+    STATE_SLEEPING,
+    STATE_ERROR_RECOVERY
+} app_state_t;
+
+typedef enum {
+    WIFI_MODE_OFF = 0,
+    WIFI_MODE_AP,
+    WIFI_MODE_STA
+} wifi_mode_t;
+
+typedef enum {
+    DISPLAY_REFRESH_NONE = 0,
+    DISPLAY_REFRESH_PARTIAL,
+    DISPLAY_REFRESH_FULL
+} display_refresh_mode_t;
+
+typedef enum {
+    POWER_POLICY_NORMAL = 0,
+    POWER_POLICY_RESTRICTED,
+    POWER_POLICY_CRITICAL
+} power_policy_t;
+
+typedef enum {
+    WAKE_REASON_UNKNOWN = 0,
+    WAKE_REASON_COLD_BOOT,
+    WAKE_REASON_TIMER,
+    WAKE_REASON_BUTTON,
+    WAKE_REASON_GPIO,
+    WAKE_REASON_SOFTWARE_RESET,
+    WAKE_REASON_DEEP_SLEEP_RESUME
+} wake_reason_t;

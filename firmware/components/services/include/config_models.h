@@ -11,6 +11,7 @@ typedef struct {
 typedef struct {
     bool mdns_enabled;
     char hostname[64];
+    bool hostname_set;
     uint16_t mcp_port;
 } config_network_t;
 

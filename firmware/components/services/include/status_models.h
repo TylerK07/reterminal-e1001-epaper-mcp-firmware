@@ -1,8 +1,8 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/enums.h"
-#include "core/types.h"
+#include "enums.h"
+#include "types.h"
 
 typedef struct {
     wifi_mode_t mode;

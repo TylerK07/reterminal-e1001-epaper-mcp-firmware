@@ -1,10 +1,12 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/errors.h"
+#include "enums.h"
+#include "errors.h"
 
 typedef struct {
-    char method[64];
+    mcp_request_method_t request_method;
+    char method_name[64];
     char target[128];
     const char *args_json;
     const char *token;

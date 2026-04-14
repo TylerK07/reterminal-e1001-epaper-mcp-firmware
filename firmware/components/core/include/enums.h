@@ -58,3 +58,29 @@ typedef enum {
     WAKE_REASON_SOFTWARE_RESET,
     WAKE_REASON_DEEP_SLEEP_RESUME
 } wake_reason_t;
+
+typedef enum {
+    MCP_AUTH_NONE = 0,
+    MCP_AUTH_STANDARD,
+    MCP_AUTH_PRIVILEGED
+} mcp_auth_level_t;
+
+typedef enum {
+    MCP_COST_LOW = 0,
+    MCP_COST_MEDIUM,
+    MCP_COST_HIGH
+} mcp_cost_class_t;
+
+typedef enum {
+    MCP_REQUEST_METHOD_UNKNOWN = 0,
+    MCP_REQUEST_METHOD_TOOL,
+    MCP_REQUEST_METHOD_RESOURCE
+} mcp_request_method_t;
+
+typedef enum {
+    RENDER_JOB_NONE = 0,
+    RENDER_JOB_TEXT,
+    RENDER_JOB_BITMAP,
+    RENDER_JOB_LAYOUT,
+    RENDER_JOB_REFRESH
+} render_job_kind_t;

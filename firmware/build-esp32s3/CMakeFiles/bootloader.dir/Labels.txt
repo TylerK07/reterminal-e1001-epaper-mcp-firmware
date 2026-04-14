@@ -1,0 +1,13 @@
+# Target labels
+ bootloader
+# Source files and their labels
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/CMakeFiles/bootloader
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/CMakeFiles/bootloader.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/CMakeFiles/bootloader-complete.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-build.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-configure.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-download.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-install.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-mkdir.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-patch.rule
+/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/bootloader-prefix/src/bootloader-stamp/bootloader-update.rule

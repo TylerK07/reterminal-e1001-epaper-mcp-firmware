@@ -1,4 +1,4 @@
-#include "platform/power.h"
+#include "power.h"
 
 error_code_t power_init(void) { return ERR_OK; }
 wake_reason_t power_get_wake_reason(void) { return WAKE_REASON_COLD_BOOT; }

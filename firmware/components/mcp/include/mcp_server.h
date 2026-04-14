@@ -1,7 +1,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/errors.h"
+#include "errors.h"
 
 typedef struct {
     uint16_t port;

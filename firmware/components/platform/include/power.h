@@ -1,8 +1,8 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/enums.h"
-#include "core/errors.h"
+#include "enums.h"
+#include "errors.h"
 
 typedef struct {
     bool timer_wake_enabled;

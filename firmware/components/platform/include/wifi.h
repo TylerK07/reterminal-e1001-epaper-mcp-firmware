@@ -1,8 +1,8 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/enums.h"
-#include "core/errors.h"
+#include "enums.h"
+#include "errors.h"
 
 #define WIFI_MAX_SCAN_RESULTS 50
 
@@ -36,7 +36,7 @@ typedef struct {
     char ip_address[40];
     char hostname[64];
     int16_t rssi;
-} wifi_status_t;
+} platform_wifi_status_t;
 
 error_code_t wifi_init(void);
 error_code_t wifi_set_hostname(const char *hostname);
@@ -45,4 +45,4 @@ error_code_t wifi_stop_ap(void);
 error_code_t wifi_connect_sta(const wifi_sta_credentials_t *creds, uint32_t timeout_ms);
 error_code_t wifi_disconnect_sta(void);
 error_code_t wifi_scan(wifi_scan_results_t *out_results, uint32_t timeout_ms);
-error_code_t wifi_get_status(wifi_status_t *out_status);
+error_code_t wifi_get_status(platform_wifi_status_t *out_status);

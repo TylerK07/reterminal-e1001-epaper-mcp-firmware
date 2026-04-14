@@ -1,8 +1,9 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
-#include "core/enums.h"
-#include "core/types.h"
+#include "enums.h"
+#include "status_models.h"
+#include "types.h"
 
 typedef struct {
     char text[2048];
@@ -24,6 +25,13 @@ typedef struct {
 } render_bitmap_req_t;
 
 typedef struct {
+    char layout_name[64];
+    char payload_json[1024];
+    bool commit;
+    display_refresh_mode_t refresh_mode;
+} render_layout_req_t;
+
+typedef struct {
     bool framebuffer_updated;
     bool display_refreshed;
     display_refresh_mode_t refresh_mode;
@@ -32,7 +40,13 @@ typedef struct {
 } render_result_t;
 
 typedef struct {
-    uint32_t job_kind;
+    device_status_snapshot_t snapshot;
+    app_state_t app_state;
+    bool mcp_enabled;
+} render_status_screen_t;
+
+typedef struct {
+    render_job_kind_t job_kind;
     bool framebuffer_updated;
     bool display_refreshed;
     display_refresh_mode_t refresh_mode;

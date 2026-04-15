@@ -1,0 +1,2 @@
+--flash_mode dio --flash_freq 80m --flash_size detect
+0x10000 reterminal_e1001_mcp_firmware.bin

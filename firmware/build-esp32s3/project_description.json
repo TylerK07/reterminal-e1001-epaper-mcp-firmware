@@ -1,7 +1,7 @@
 {
     "version":            "1.1",
     "project_name":       "reterminal_e1001_mcp_firmware",
-    "project_version":    "0f2e219-dirty",
+    "project_version":    "e16e02c-dirty",
     "project_path":       "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware",
     "idf_path":           "/Users/tylerklein/esp/esp-idf",
     "build_dir":          "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3",
@@ -845,7 +845,7 @@
             "dir": "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/mcp",
             "type": "LIBRARY",
             "lib": "__idf_mcp",
-            "reqs": [ "core", "services" ],
+            "reqs": [ "core", "services", "esp_http_server" ],
             "priv_reqs": [],
             "managed_reqs": [],
             "managed_priv_reqs": [],
@@ -970,7 +970,7 @@
             "managed_reqs": [],
             "managed_priv_reqs": [],
             "file": "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/build-esp32s3/esp-idf/platform/libplatform.a",
-            "sources": [ "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/battery.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/board.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/display_epaper.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/power.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/provisioning_http.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/storage_sd.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/wifi.c" ],
+            "sources": [ "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/battery.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/board.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/buttons.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/display_epaper.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/environment_sensor.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/network_mdns.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/power.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/provisioning_http.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/storage_sd.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/storage_nvs.c", "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/platform/src/wifi.c" ],
             "include_dirs": [ "include" ]
         },
         "protobuf-c": {
@@ -2211,7 +2211,7 @@
             "prefix": "idf",
             "dir": "/Users/tylerklein/github/reterminal-e1001-epaper-mcp-firmware/trees/tylerk-codex-branch/firmware/components/mcp",
             "lib": "__idf_mcp",
-            "reqs": [ "core", "services" ],
+            "reqs": [ "core", "services", "esp_http_server" ],
             "priv_reqs": [],
             "managed_reqs": [],
             "managed_priv_reqs": [],

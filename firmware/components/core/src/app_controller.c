@@ -2,9 +2,11 @@
 #include <stdbool.h>
 #include "asset_service.h"
 #include "battery.h"
+#include "buttons.h"
 #include "config_models.h"
 #include "config_service.h"
 #include "display_epaper.h"
+#include "environment_sensor.h"
 #include "mcp_dispatch.h"
 #include "mcp_server.h"
 #include "mcp_registry.h"
@@ -22,6 +24,11 @@ static bool g_mcp_enabled = false;
 static error_code_t app_controller_start_provisioning(void);
 static error_code_t app_controller_enable_mcp_if_allowed(void);
 
+static error_code_t app_controller_enter_provisioning_runtime(void) {
+    (void)network_service_disconnect();
+    return app_controller_start_provisioning();
+}
+
 static error_code_t app_controller_connect_runtime(void) {
     error_code_t err;
 
@@ -35,6 +42,11 @@ static error_code_t app_controller_connect_runtime(void) {
 
     g_state = STATE_CONNECTED_IDLE;
 
+    err = network_service_start_discovery_from_config();
+    if (err != ERR_OK) {
+        return err;
+    }
+
     err = app_controller_enable_mcp_if_allowed();
     if (err != ERR_OK) {
         g_mcp_enabled = false;
@@ -45,6 +57,10 @@ static error_code_t app_controller_connect_runtime(void) {
 }
 
 static error_code_t app_controller_start_provisioning(void) {
+    (void)network_service_stop_discovery();
+    g_mcp_enabled = false;
+    (void)mcp_server_stop();
+
     error_code_t err = provisioning_service_start();
     if (err != ERR_OK) {
         g_state = STATE_ERROR_RECOVERY;
@@ -52,8 +68,6 @@ static error_code_t app_controller_start_provisioning(void) {
     }
 
     g_state = STATE_PROVISIONING;
-    g_mcp_enabled = false;
-    (void)mcp_server_stop();
     return ERR_OK;
 }
 
@@ -70,16 +84,19 @@ static error_code_t app_controller_enable_mcp_if_allowed(void) {
         return err;
     }
 
-    if (!config_service_has_auth_token() || !power_operation_allowed(policy, "mcp_server")) {
+    err = mcp_server_start(config.network.mcp_port);
+    if (err != ERR_OK) {
         g_mcp_enabled = false;
-        return mcp_server_stop();
+        return err;
     }
 
-    err = mcp_server_start(config.network.mcp_port);
-    if (err == ERR_OK) {
-        g_mcp_enabled = true;
+    if (!config_service_has_auth_token() || !power_operation_allowed(policy, "mcp_server")) {
+        g_mcp_enabled = false;
+        return ERR_OK;
     }
-    return err;
+
+    g_mcp_enabled = true;
+    return ERR_OK;
 }
 
 error_code_t app_controller_init(void) {
@@ -99,10 +116,16 @@ error_code_t app_controller_init(void) {
     if (battery_init() != ERR_OK) {
         return ERR_INTERNAL;
     }
+    if (buttons_init() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
     if (wifi_init() != ERR_OK) {
         return ERR_INTERNAL;
     }
     if (display_init() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    if (environment_sensor_init() != ERR_OK) {
         return ERR_INTERNAL;
     }
     if (asset_service_init() != ERR_OK) {
@@ -134,6 +157,14 @@ error_code_t app_controller_init(void) {
 }
 
 error_code_t app_controller_run(void) {
+    bool button_override_requested = false;
+
+    if (buttons_is_any_pressed(&button_override_requested) == ERR_OK && button_override_requested) {
+        (void)config_service_clear_wifi_credentials();
+        g_state = STATE_UNPROVISIONED;
+        return app_controller_start_provisioning();
+    }
+
     if (!config_service_is_provisioned()) {
         g_state = STATE_UNPROVISIONED;
         return app_controller_start_provisioning();
@@ -144,8 +175,13 @@ error_code_t app_controller_run(void) {
 
 error_code_t app_controller_tick(void) {
     provisioning_status_t provisioning_status;
+    error_code_t err;
 
     if (g_state != STATE_PROVISIONING) {
+        if (!config_service_is_provisioned()) {
+            g_state = STATE_UNPROVISIONED;
+            return app_controller_enter_provisioning_runtime();
+        }
         return ERR_OK;
     }
 
@@ -154,6 +190,10 @@ error_code_t app_controller_tick(void) {
     }
 
     if (provisioning_status.state == PROVISIONING_STATE_CONNECTED && config_service_is_provisioned()) {
+        err = provisioning_service_stop();
+        if (err != ERR_OK) {
+            return err;
+        }
         return app_controller_connect_runtime();
     }
 

@@ -5,6 +5,7 @@
 static const mcp_tool_metadata_t g_tools[] = {
     {"get_device_info", MCP_AUTH_STANDARD, MCP_COST_LOW},
     {"get_battery_status", MCP_AUTH_STANDARD, MCP_COST_LOW},
+    {"get_environment_status", MCP_AUTH_STANDARD, MCP_COST_LOW},
     {"get_wifi_status", MCP_AUTH_STANDARD, MCP_COST_LOW},
     {"scan_wifi", MCP_AUTH_PRIVILEGED, MCP_COST_MEDIUM},
     {"connect_wifi", MCP_AUTH_PRIVILEGED, MCP_COST_MEDIUM},
@@ -13,6 +14,7 @@ static const mcp_tool_metadata_t g_tools[] = {
     {"get_config", MCP_AUTH_PRIVILEGED, MCP_COST_LOW},
     {"set_config", MCP_AUTH_PRIVILEGED, MCP_COST_MEDIUM},
     {"render_text", MCP_AUTH_STANDARD, MCP_COST_LOW},
+    {"clear_region", MCP_AUTH_STANDARD, MCP_COST_LOW},
     {"render_bitmap", MCP_AUTH_STANDARD, MCP_COST_MEDIUM},
     {"render_layout", MCP_AUTH_STANDARD, MCP_COST_MEDIUM},
     {"refresh_display", MCP_AUTH_STANDARD, MCP_COST_HIGH},
@@ -24,6 +26,7 @@ static const mcp_tool_metadata_t g_tools[] = {
 static const mcp_resource_metadata_t g_resources[] = {
     {"device://status", MCP_AUTH_STANDARD},
     {"device://power/battery", MCP_AUTH_STANDARD},
+    {"device://environment", MCP_AUTH_STANDARD},
     {"device://network/wifi", MCP_AUTH_STANDARD},
     {"device://config", MCP_AUTH_PRIVILEGED},
     {"device://display/capabilities", MCP_AUTH_STANDARD},

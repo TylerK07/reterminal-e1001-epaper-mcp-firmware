@@ -14,11 +14,15 @@
 static board_pin_map_t g_pin_map;
 static board_display_profile_t g_display_profile;
 static uint8_t g_framebuffer[(800U * 480U) / 8U];
+static uint8_t g_committed_framebuffer[(800U * 480U) / 8U];
+static uint8_t g_partial_row_buffer[800U / 8U];
 static bool g_initialized = false;
 static bool g_busy = false;
 static uint32_t g_last_refresh_ms = 0U;
 static display_refresh_mode_t g_last_refresh_mode = DISPLAY_REFRESH_NONE;
 static bool g_partial_mode_active = false;
+static bool g_panel_powered = false;
+static uint8_t g_partial_refresh_count = 0U;
 
 typedef enum {
     UC8179_DRIVE_MODE_FULL = 0,
@@ -70,6 +74,12 @@ typedef struct {
 
 static error_code_t uc8179_write_data(const uint8_t *data, size_t data_len);
 static error_code_t uc8179_begin_framebuffer_write(bool previous_frame_plane);
+static error_code_t uc8179_write_command(uc8179_command_t command, const uint8_t *data, size_t data_len);
+static error_code_t uc8179_wait_while_busy(void);
+static error_code_t uc8179_power_on_if_needed(void);
+static error_code_t uc8179_power_off_if_needed(void);
+static error_code_t uc8179_enter_partial_window(const rect_u16_t *region);
+static error_code_t uc8179_exit_partial_window(void);
 
 static const uc8179_sequence_step_t g_uc8179_init_sequence[] = {
     {UC8179_CMD_POWER_SETTING, {0x07, 0x07, 0x3F, 0x3F}, 4U, false},
@@ -106,6 +116,70 @@ static void display_framebuffer_fill(bool white) {
     memset(g_framebuffer, white ? 0x00 : 0xFF, sizeof(g_framebuffer));
 }
 
+static void display_copy_framebuffer_state(void) {
+    memcpy(g_committed_framebuffer, g_framebuffer, sizeof(g_framebuffer));
+}
+
+static void display_copy_region_to_committed(const rect_u16_t *region) {
+    uint16_t bytes_per_row;
+    uint16_t start_byte;
+    uint16_t row_byte_count;
+    uint16_t row;
+
+    if (!region) {
+        return;
+    }
+
+    bytes_per_row = display_get_bytes_per_row();
+    start_byte = (uint16_t)(region->x / 8U);
+    row_byte_count = (uint16_t)(region->w / 8U);
+
+    for (row = 0U; row < region->h; ++row) {
+        uint32_t offset = ((uint32_t)(region->y + row) * (uint32_t)bytes_per_row) + (uint32_t)start_byte;
+        memcpy(&g_committed_framebuffer[offset], &g_framebuffer[offset], row_byte_count);
+    }
+}
+
+static error_code_t display_normalize_partial_region(const rect_u16_t *region, rect_u16_t *out_region) {
+    uint16_t x0;
+    uint16_t x1;
+    uint16_t y1;
+
+    if (!region || !out_region) {
+        return ERR_INVALID_ARGS;
+    }
+    if (region->w == 0U || region->h == 0U) {
+        return ERR_INVALID_ARGS;
+    }
+    if (region->x >= g_display_profile.width || region->y >= g_display_profile.height) {
+        return ERR_INVALID_ARGS;
+    }
+
+    x0 = (uint16_t)(region->x & 0xFFF8U);
+    x1 = (uint16_t)(region->x + region->w);
+    if (x1 > g_display_profile.width) {
+        x1 = g_display_profile.width;
+    }
+    x1 = (uint16_t)((x1 + 7U) & 0xFFF8U);
+    if (x1 > g_display_profile.width) {
+        x1 = g_display_profile.width;
+    }
+
+    y1 = (uint16_t)(region->y + region->h);
+    if (y1 > g_display_profile.height) {
+        y1 = g_display_profile.height;
+    }
+
+    out_region->x = x0;
+    out_region->y = region->y;
+    out_region->w = (uint16_t)(x1 - x0);
+    out_region->h = (uint16_t)(y1 - region->y);
+    if (out_region->w == 0U || out_region->h == 0U) {
+        return ERR_INVALID_ARGS;
+    }
+    return ERR_OK;
+}
+
 static void display_set_pixel(uint16_t x, uint16_t y, bool black) {
     uint32_t byte_index;
     uint8_t mask;
@@ -121,6 +195,40 @@ static void display_set_pixel(uint16_t x, uint16_t y, bool black) {
     } else {
         g_framebuffer[byte_index] &= (uint8_t)(~mask);
     }
+}
+
+error_code_t display_fill_region(const rect_u16_t *region, bool black) {
+    uint16_t x_end;
+    uint16_t y_end;
+    uint16_t y;
+
+    if (!g_initialized || !region) {
+        return ERR_INVALID_ARGS;
+    }
+    if (region->w == 0U || region->h == 0U) {
+        return ERR_INVALID_ARGS;
+    }
+    if (region->x >= g_display_profile.width || region->y >= g_display_profile.height) {
+        return ERR_INVALID_ARGS;
+    }
+
+    x_end = (uint16_t)(region->x + region->w);
+    y_end = (uint16_t)(region->y + region->h);
+    if (x_end > g_display_profile.width) {
+        x_end = g_display_profile.width;
+    }
+    if (y_end > g_display_profile.height) {
+        y_end = g_display_profile.height;
+    }
+
+    for (y = region->y; y < y_end; ++y) {
+        uint16_t x;
+        for (x = region->x; x < x_end; ++x) {
+            display_set_pixel(x, y, black);
+        }
+    }
+
+    return ERR_OK;
 }
 
 static const uint8_t *display_get_glyph(char c) {
@@ -209,7 +317,7 @@ static uint16_t display_font_scale_for_size(uint16_t size) {
     return 1U;
 }
 
-static void display_draw_glyph(char c, uint16_t x, uint16_t y, uint16_t scale) {
+static void display_draw_glyph(char c, uint16_t x, uint16_t y, uint16_t scale, bool draw_black) {
     uint16_t col;
 
     for (col = 0U; col < 5U; ++col) {
@@ -218,13 +326,15 @@ static void display_draw_glyph(char c, uint16_t x, uint16_t y, uint16_t scale) {
         for (row = 0U; row < 7U; ++row) {
             uint16_t dx;
             uint16_t dy;
-            bool black = ((column_bits >> row) & 0x01U) != 0U;
+            bool glyph_pixel_on = ((column_bits >> row) & 0x01U) != 0U;
             for (dy = 0U; dy < scale; ++dy) {
                 for (dx = 0U; dx < scale; ++dx) {
-                    display_set_pixel(
-                        (uint16_t)(x + (col * scale) + dx),
-                        (uint16_t)(y + (row * scale) + dy),
-                        black);
+                    if (glyph_pixel_on) {
+                        display_set_pixel(
+                            (uint16_t)(x + (col * scale) + dx),
+                            (uint16_t)(y + (row * scale) + dy),
+                            draw_black);
+                    }
                 }
             }
         }
@@ -235,12 +345,15 @@ static error_code_t display_upload_framebuffer(bool upload_previous_plane, bool 
     if (!g_initialized) {
         return ERR_INTERNAL;
     }
+    if (uc8179_power_on_if_needed() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
 
     if (upload_previous_plane) {
         if (uc8179_begin_framebuffer_write(true) != ERR_OK) {
             return ERR_INTERNAL;
         }
-        if (uc8179_write_data(g_framebuffer, sizeof(g_framebuffer)) != ERR_OK) {
+        if (uc8179_write_data(g_committed_framebuffer, sizeof(g_committed_framebuffer)) != ERR_OK) {
             return ERR_INTERNAL;
         }
     }
@@ -250,6 +363,60 @@ static error_code_t display_upload_framebuffer(bool upload_previous_plane, bool 
             return ERR_INTERNAL;
         }
         if (uc8179_write_data(g_framebuffer, sizeof(g_framebuffer)) != ERR_OK) {
+            return ERR_INTERNAL;
+        }
+    }
+
+    return ERR_OK;
+}
+
+static error_code_t display_upload_partial_region_data(const rect_u16_t *region) {
+    uint16_t bytes_per_row;
+    uint16_t start_byte;
+    uint16_t row_byte_count;
+    uint16_t row;
+
+    if (!g_initialized || !region) {
+        return ERR_INVALID_ARGS;
+    }
+
+    bytes_per_row = display_get_bytes_per_row();
+    start_byte = (uint16_t)(region->x / 8U);
+    row_byte_count = (uint16_t)(region->w / 8U);
+    if (row_byte_count > sizeof(g_partial_row_buffer)) {
+        return ERR_INVALID_ARGS;
+    }
+    if (uc8179_power_on_if_needed() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+
+    if (uc8179_begin_framebuffer_write(true) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    for (row = 0U; row < region->h; ++row) {
+        uint16_t i;
+        uint32_t offset = ((uint32_t)(region->y + row) * (uint32_t)bytes_per_row) + (uint32_t)start_byte;
+        memcpy(g_partial_row_buffer, &g_committed_framebuffer[offset], row_byte_count);
+        for (i = 0U; i < row_byte_count; ++i) {
+            g_partial_row_buffer[i] = (uint8_t)(~g_partial_row_buffer[i]);
+        }
+        if (uc8179_write_data(g_partial_row_buffer, row_byte_count) != ERR_OK) {
+            return ERR_INTERNAL;
+        }
+    }
+
+    if (uc8179_begin_framebuffer_write(false) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+
+    for (row = 0U; row < region->h; ++row) {
+        uint16_t i;
+        uint32_t offset = ((uint32_t)(region->y + row) * (uint32_t)bytes_per_row) + (uint32_t)start_byte;
+        memcpy(g_partial_row_buffer, &g_framebuffer[offset], row_byte_count);
+        for (i = 0U; i < row_byte_count; ++i) {
+            g_partial_row_buffer[i] = (uint8_t)(~g_partial_row_buffer[i]);
+        }
+        if (uc8179_write_data(g_partial_row_buffer, row_byte_count) != ERR_OK) {
             return ERR_INTERNAL;
         }
     }
@@ -471,6 +638,8 @@ static error_code_t uc8179_initialize_panel(void) {
     g_initialized = true;
     g_drive_mode = UC8179_DRIVE_MODE_FULL;
     g_partial_mode_active = false;
+    g_panel_powered = true;
+    g_partial_refresh_count = 0U;
     return ERR_OK;
 }
 
@@ -509,7 +678,42 @@ static error_code_t uc8179_initialize_mode(uc8179_drive_mode_t mode) {
     g_initialized = true;
     g_drive_mode = mode;
     g_partial_mode_active = false;
+    g_panel_powered = true;
     return ERR_OK;
+}
+
+static error_code_t uc8179_power_on_if_needed(void) {
+    if (g_panel_powered) {
+        return ERR_OK;
+    }
+    if (uc8179_write_command(UC8179_CMD_POWER_ON, NULL, 0U) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    g_busy = true;
+    if (uc8179_wait_while_busy() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    g_panel_powered = true;
+    return ERR_OK;
+}
+
+static error_code_t uc8179_power_off_if_needed(void) {
+    if (!g_panel_powered) {
+        return ERR_OK;
+    }
+    if (uc8179_write_command(UC8179_CMD_POWER_OFF, NULL, 0U) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    g_busy = true;
+    if (uc8179_wait_while_busy() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    g_panel_powered = false;
+    return ERR_OK;
+}
+
+static uint8_t display_partial_budget(void) {
+    return 6U;
 }
 
 static error_code_t uc8179_begin_framebuffer_write(bool previous_frame_plane) {
@@ -519,38 +723,64 @@ static error_code_t uc8179_begin_framebuffer_write(bool previous_frame_plane) {
         0U);
 }
 
-static error_code_t uc8179_trigger_refresh(display_refresh_mode_t mode, const rect_u16_t *region) {
+static error_code_t uc8179_enter_partial_window(const rect_u16_t *region) {
     uint8_t partial_window[9];
     const uint8_t partial_vcom_data[] = {0xA9, 0x07};
+    uint16_t x_end;
+    uint16_t y_end;
 
+    if (!region) {
+        return ERR_INVALID_ARGS;
+    }
+
+    x_end = (uint16_t)(region->x + region->w - 1U);
+    y_end = (uint16_t)(region->y + region->h - 1U);
+
+    if (uc8179_write_command(
+            UC8179_CMD_VCOM_AND_DATA_INTERVAL_SETTING,
+            partial_vcom_data,
+            sizeof(partial_vcom_data)) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+
+    partial_window[0] = (uint8_t)(region->x >> 8);
+    partial_window[1] = (uint8_t)(region->x & 0xFFU);
+    partial_window[2] = (uint8_t)(x_end >> 8);
+    partial_window[3] = (uint8_t)(x_end & 0xFFU);
+    partial_window[4] = (uint8_t)(region->y >> 8);
+    partial_window[5] = (uint8_t)(region->y & 0xFFU);
+    partial_window[6] = (uint8_t)(y_end >> 8);
+    partial_window[7] = (uint8_t)(y_end & 0xFFU);
+    partial_window[8] = 0x01U;
+
+    if (uc8179_write_command(UC8179_CMD_PARTIAL_WINDOW, partial_window, sizeof(partial_window)) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    if (uc8179_write_command(UC8179_CMD_PARTIAL_IN, NULL, 0U) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+
+    g_partial_mode_active = true;
+    return ERR_OK;
+}
+
+static error_code_t uc8179_exit_partial_window(void) {
+    if (uc8179_write_command(UC8179_CMD_PARTIAL_OUT, NULL, 0U) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    g_partial_mode_active = false;
+    return ERR_OK;
+}
+
+static error_code_t uc8179_trigger_refresh(display_refresh_mode_t mode, const rect_u16_t *region) {
     if (!g_initialized) {
         return ERR_INTERNAL;
     }
 
     if (mode == DISPLAY_REFRESH_PARTIAL && region) {
-        if (uc8179_write_command(
-                UC8179_CMD_VCOM_AND_DATA_INTERVAL_SETTING,
-                partial_vcom_data,
-                sizeof(partial_vcom_data)) != ERR_OK) {
+        if (uc8179_enter_partial_window(region) != ERR_OK) {
             return ERR_INTERNAL;
         }
-        partial_window[0] = (uint8_t)(region->x >> 8);
-        partial_window[1] = (uint8_t)(region->x & 0xFFU);
-        partial_window[2] = (uint8_t)(((region->x + region->w - 1U) >> 8) & 0xFFU);
-        partial_window[3] = (uint8_t)((region->x + region->w - 1U) & 0xFFU);
-        partial_window[4] = (uint8_t)(region->y >> 8);
-        partial_window[5] = (uint8_t)(region->y & 0xFFU);
-        partial_window[6] = (uint8_t)(((region->y + region->h - 1U) >> 8) & 0xFFU);
-        partial_window[7] = (uint8_t)((region->y + region->h - 1U) & 0xFFU);
-        partial_window[8] = 0x01U;
-
-        if (uc8179_write_command(UC8179_CMD_PARTIAL_IN, NULL, 0U) != ERR_OK) {
-            return ERR_INTERNAL;
-        }
-        if (uc8179_write_command(UC8179_CMD_PARTIAL_WINDOW, partial_window, sizeof(partial_window)) != ERR_OK) {
-            return ERR_INTERNAL;
-        }
-        g_partial_mode_active = true;
     }
 
     g_busy = true;
@@ -563,16 +793,18 @@ static error_code_t uc8179_trigger_refresh(display_refresh_mode_t mode, const re
     }
 
     if (mode == DISPLAY_REFRESH_PARTIAL && region) {
-        if (uc8179_write_command(UC8179_CMD_PARTIAL_OUT, NULL, 0U) != ERR_OK) {
+        if (uc8179_exit_partial_window() != ERR_OK) {
             return ERR_INTERNAL;
         }
-        g_partial_mode_active = false;
     }
 
     g_last_refresh_mode = mode;
     g_last_refresh_ms = (mode == DISPLAY_REFRESH_PARTIAL)
         ? g_display_profile.partial_refresh_time_ms
         : g_display_profile.full_refresh_time_ms;
+    if (uc8179_power_off_if_needed() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
     return ERR_OK;
 }
 
@@ -593,6 +825,7 @@ error_code_t display_init(void) {
 #endif
 
     display_framebuffer_fill(true);
+    memset(g_committed_framebuffer, 0x00, sizeof(g_committed_framebuffer));
     return uc8179_initialize_panel();
 }
 error_code_t display_get_caps(display_caps_t *out_caps) {
@@ -616,6 +849,10 @@ error_code_t display_draw_text(const display_text_draw_req_t *req, rect_u16_t *o
     uint16_t scale;
     uint16_t glyph_w;
     uint16_t glyph_h;
+    uint16_t max_line_width = 0U;
+    uint16_t line_width = 0U;
+    uint16_t line_count = 1U;
+    rect_u16_t background_region;
 
     if (!req || !out_region) return ERR_INVALID_ARGS;
     if (!g_initialized) {
@@ -630,8 +867,34 @@ error_code_t display_draw_text(const display_text_draw_req_t *req, rect_u16_t *o
 
     out_region->x = req->x;
     out_region->y = req->y;
-    out_region->w = 0U;
+    out_region->w = glyph_w;
     out_region->h = glyph_h;
+
+    for (i = 0U; req->text[i] != '\0'; ++i) {
+        if (req->text[i] == '\n') {
+            if (line_width > max_line_width) {
+                max_line_width = line_width;
+            }
+            line_width = 0U;
+            ++line_count;
+            continue;
+        }
+        line_width = (uint16_t)(line_width + glyph_w);
+    }
+    if (line_width > max_line_width) {
+        max_line_width = line_width;
+    }
+    if (max_line_width > 0U) {
+        out_region->w = max_line_width;
+    }
+    out_region->h = (uint16_t)(glyph_h * line_count);
+
+    if (req->background_mode != DISPLAY_BACKGROUND_TRANSPARENT) {
+        background_region = *out_region;
+        if (display_fill_region(&background_region, req->background_mode == DISPLAY_BACKGROUND_BLACK) != ERR_OK) {
+            return ERR_INTERNAL;
+        }
+    }
 
     for (i = 0U; req->text[i] != '\0'; ++i) {
         char c = req->text[i];
@@ -639,13 +902,11 @@ error_code_t display_draw_text(const display_text_draw_req_t *req, rect_u16_t *o
         if (c == '\n') {
             cursor_x = req->x;
             cursor_y = (uint16_t)(cursor_y + glyph_h);
-            out_region->h = (uint16_t)(out_region->h + glyph_h);
             continue;
         }
 
-        display_draw_glyph(c, cursor_x, cursor_y, scale);
+        display_draw_glyph(c, cursor_x, cursor_y, scale, req->foreground_color != DISPLAY_FOREGROUND_WHITE);
         cursor_x = (uint16_t)(cursor_x + glyph_w);
-        out_region->w = (uint16_t)(cursor_x - req->x);
     }
 
     return ERR_OK;
@@ -724,6 +985,8 @@ error_code_t display_refresh_full(uint32_t *out_elapsed_ms) {
     if (err != ERR_OK) {
         return err;
     }
+    display_copy_framebuffer_state();
+    g_partial_refresh_count = 0U;
     if (out_elapsed_ms) {
         *out_elapsed_ms = g_last_refresh_ms;
     }
@@ -731,8 +994,17 @@ error_code_t display_refresh_full(uint32_t *out_elapsed_ms) {
 }
 error_code_t display_refresh_partial(const rect_u16_t *region, uint32_t *out_elapsed_ms) {
     error_code_t err;
+    rect_u16_t normalized_region;
+
     if (!region) {
         return ERR_INVALID_ARGS;
+    }
+    if (g_partial_refresh_count >= display_partial_budget()) {
+        return display_refresh_full(out_elapsed_ms);
+    }
+    err = display_normalize_partial_region(region, &normalized_region);
+    if (err != ERR_OK) {
+        return err;
     }
     if (g_drive_mode != UC8179_DRIVE_MODE_PARTIAL) {
         err = uc8179_initialize_mode(UC8179_DRIVE_MODE_PARTIAL);
@@ -740,14 +1012,26 @@ error_code_t display_refresh_partial(const rect_u16_t *region, uint32_t *out_ela
             return err;
         }
     }
-    err = display_upload_framebuffer(false, true);
+    err = uc8179_enter_partial_window(&normalized_region);
     if (err != ERR_OK) {
         return err;
     }
-    err = uc8179_trigger_refresh(DISPLAY_REFRESH_PARTIAL, region);
+    err = display_upload_partial_region_data(&normalized_region);
+    if (err != ERR_OK) {
+        (void)uc8179_exit_partial_window();
+        return err;
+    }
+    err = uc8179_trigger_refresh(DISPLAY_REFRESH_PARTIAL, NULL);
+    if (err != ERR_OK) {
+        (void)uc8179_exit_partial_window();
+        return err;
+    }
+    err = uc8179_exit_partial_window();
     if (err != ERR_OK) {
         return err;
     }
+    display_copy_region_to_committed(&normalized_region);
+    ++g_partial_refresh_count;
     if (out_elapsed_ms) {
         *out_elapsed_ms = g_last_refresh_ms;
     }

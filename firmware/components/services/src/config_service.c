@@ -1,8 +1,12 @@
 #include "config_service.h"
 #include <stdio.h>
 #include <string.h>
+#include "storage_nvs.h"
 
 static device_config_t g_cfg;
+
+#define CONFIG_SERVICE_NVS_NAMESPACE "cfg"
+#define CONFIG_SERVICE_NVS_KEY "device"
 
 static void config_service_apply_defaults(device_config_t *cfg) {
     memset(cfg, 0, sizeof(*cfg));
@@ -23,9 +27,51 @@ static void config_service_apply_defaults(device_config_t *cfg) {
     strncpy(cfg->device_name, "reterminal-e1001", sizeof(cfg->device_name) - 1U);
 }
 
+static error_code_t config_service_persist(void) {
+    return storage_nvs_write_blob(CONFIG_SERVICE_NVS_NAMESPACE, CONFIG_SERVICE_NVS_KEY, &g_cfg, sizeof(g_cfg));
+}
+
+static void config_service_sanitize_loaded(device_config_t *cfg) {
+    if (!cfg) {
+        return;
+    }
+
+    cfg->device_name[sizeof(cfg->device_name) - 1U] = '\0';
+    cfg->auth_token[sizeof(cfg->auth_token) - 1U] = '\0';
+    cfg->wifi.ssid[sizeof(cfg->wifi.ssid) - 1U] = '\0';
+    cfg->wifi.password[sizeof(cfg->wifi.password) - 1U] = '\0';
+    cfg->network.hostname[sizeof(cfg->network.hostname) - 1U] = '\0';
+    cfg->provisioning.ap_password[sizeof(cfg->provisioning.ap_password) - 1U] = '\0';
+    cfg->display.default_font_name[sizeof(cfg->display.default_font_name) - 1U] = '\0';
+
+    cfg->auth_token_set = (cfg->auth_token[0] != '\0');
+    cfg->wifi.configured = (cfg->wifi.ssid[0] != '\0');
+    cfg->network.hostname_set = (cfg->network.hostname[0] != '\0');
+}
+
 error_code_t config_service_init(void) {
+    uint32_t loaded_len = 0U;
+    error_code_t err;
+
     config_service_apply_defaults(&g_cfg);
-    return ERR_OK;
+    if (storage_nvs_init() != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+
+    err = storage_nvs_read_blob(CONFIG_SERVICE_NVS_NAMESPACE, CONFIG_SERVICE_NVS_KEY, &g_cfg, sizeof(g_cfg), &loaded_len);
+    if (err == ERR_OK) {
+        if (loaded_len == sizeof(g_cfg) && g_cfg.schema_version == 1U) {
+            config_service_sanitize_loaded(&g_cfg);
+            return ERR_OK;
+        }
+        config_service_apply_defaults(&g_cfg);
+        return config_service_persist();
+    }
+    if (err != ERR_NOT_FOUND) {
+        return err;
+    }
+
+    return config_service_persist();
 }
 
 error_code_t config_service_reset_defaults(void) {
@@ -42,7 +88,7 @@ error_code_t config_service_reset_defaults(void) {
     if (wifi_configured) {
         (void)config_service_set_wifi_credentials(preserved_ssid, preserved_password);
     }
-    return ERR_OK;
+    return config_service_persist();
 }
 
 error_code_t config_service_get(device_config_t *out_cfg) {
@@ -109,7 +155,7 @@ error_code_t config_service_patch(const config_patch_req_t *patch, bool *out_res
         g_cfg.display.show_status_on_connect = patch->show_status_on_connect;
     }
 
-    return ERR_OK;
+    return config_service_persist();
 }
 
 error_code_t config_service_set_wifi_credentials(const char *ssid, const char *password) {
@@ -122,12 +168,12 @@ error_code_t config_service_set_wifi_credentials(const char *ssid, const char *p
     strncpy(g_cfg.wifi.password, password, sizeof(g_cfg.wifi.password) - 1U);
     g_cfg.wifi.password[sizeof(g_cfg.wifi.password) - 1U] = '\0';
     g_cfg.wifi.configured = (g_cfg.wifi.ssid[0] != '\0');
-    return ERR_OK;
+    return config_service_persist();
 }
 
 error_code_t config_service_clear_wifi_credentials(void) {
     memset(&g_cfg.wifi, 0, sizeof(g_cfg.wifi));
-    return ERR_OK;
+    return config_service_persist();
 }
 
 error_code_t config_service_set_auth_token(const char *token) {
@@ -138,7 +184,7 @@ error_code_t config_service_set_auth_token(const char *token) {
     strncpy(g_cfg.auth_token, token, sizeof(g_cfg.auth_token) - 1U);
     g_cfg.auth_token[sizeof(g_cfg.auth_token) - 1U] = '\0';
     g_cfg.auth_token_set = (g_cfg.auth_token[0] != '\0');
-    return ERR_OK;
+    return config_service_persist();
 }
 
 error_code_t config_service_get_auth_token(char *buffer, uint32_t buffer_len) {

@@ -112,15 +112,23 @@ error_code_t provisioning_service_submit(const provisioning_submission_t *submis
     g_status.state = PROVISIONING_STATE_CONNECTED;
     g_active = false;
     g_status.ap_active = false;
+    return ERR_OK;
+}
+
+error_code_t provisioning_service_request_reset(void) {
     (void)provisioning_http_stop();
-    return wifi_stop_ap();
+    g_active = false;
+    g_status.state = PROVISIONING_STATE_UNPROVISIONED;
+    g_status.ap_active = false;
+    g_status.ap_ssid[0] = '\0';
+    g_status.ap_ip_address[0] = '\0';
+    g_status.timeout_remaining_sec = 0U;
+    return config_service_clear_wifi_credentials();
 }
 
 error_code_t provisioning_service_reset(void) {
-    (void)provisioning_http_stop();
-    g_active = false;
+    (void)provisioning_service_request_reset();
     memset(&g_status, 0, sizeof(g_status));
     g_status.state = PROVISIONING_STATE_UNPROVISIONED;
-    (void)config_service_clear_wifi_credentials();
     return wifi_stop_ap();
 }

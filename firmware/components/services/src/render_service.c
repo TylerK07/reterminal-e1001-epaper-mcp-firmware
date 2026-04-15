@@ -2,12 +2,18 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#ifdef ESP_PLATFORM
+#include "esp_log.h"
+#endif
 #include "display_epaper.h"
 #include "power.h"
 
 static last_render_record_t g_last_render;
 static display_text_draw_req_t g_text_draw_req;
 static rect_u16_t g_text_draw_region;
+#ifdef ESP_PLATFORM
+static const char *TAG = "render_service";
+#endif
 
 static void render_service_store_record(render_job_kind_t job_kind, const render_result_t *result, error_code_t error_code) {
     memset(&g_last_render, 0, sizeof(g_last_render));
@@ -89,6 +95,8 @@ static error_code_t render_service_draw_line(const char *text, uint16_t x, uint1
     g_text_draw_req.x = x;
     g_text_draw_req.y = y;
     g_text_draw_req.size = render_service_font_size_to_pixels(size);
+    g_text_draw_req.foreground_color = DISPLAY_FOREGROUND_BLACK;
+    g_text_draw_req.background_mode = DISPLAY_BACKGROUND_TRANSPARENT;
     return display_draw_text(&g_text_draw_req, &g_text_draw_region);
 }
 
@@ -159,6 +167,8 @@ error_code_t render_service_render_text(const render_text_req_t *req, render_res
     draw_req.x = req->x;
     draw_req.y = req->y;
     draw_req.size = req->size;
+    draw_req.foreground_color = req->foreground_color;
+    draw_req.background_mode = req->background_mode;
 
     err = display_draw_text(&draw_req, &region);
     if (err != ERR_OK) {
@@ -177,6 +187,45 @@ error_code_t render_service_render_text(const render_text_req_t *req, render_res
     }
 
     render_service_store_record(RENDER_JOB_TEXT, out_result, ERR_OK);
+    return ERR_OK;
+}
+
+error_code_t render_service_clear_region(
+    const rect_u16_t *region,
+    bool black,
+    bool commit,
+    display_refresh_mode_t refresh_mode,
+    render_result_t *out_result) {
+    error_code_t err;
+
+    if (!region || !out_result) {
+        return ERR_INVALID_ARGS;
+    }
+
+    memset(out_result, 0, sizeof(*out_result));
+
+    if (display_is_busy()) {
+        render_service_store_record(RENDER_JOB_REFRESH, out_result, ERR_BUSY);
+        return ERR_BUSY;
+    }
+
+    err = display_fill_region(region, black);
+    if (err != ERR_OK) {
+        render_service_store_record(RENDER_JOB_REFRESH, out_result, err);
+        return err;
+    }
+
+    out_result->framebuffer_updated = true;
+    out_result->affected_region = *region;
+    if (commit) {
+        err = render_service_refresh(refresh_mode, region, out_result);
+        if (err != ERR_OK) {
+            render_service_store_record(RENDER_JOB_REFRESH, out_result, err);
+            return err;
+        }
+    }
+
+    render_service_store_record(RENDER_JOB_REFRESH, out_result, ERR_OK);
     return ERR_OK;
 }
 
@@ -203,6 +252,13 @@ error_code_t render_service_refresh(display_refresh_mode_t mode, const rect_u16_
     if (mode == DISPLAY_REFRESH_PARTIAL && region) {
         err = display_refresh_partial(region, &out_result->elapsed_ms);
     } else {
+#ifdef ESP_PLATFORM
+        ESP_LOGI(
+            TAG,
+            "refresh using full path requested_mode=%u region_present=%s",
+            (unsigned int)mode,
+            region ? "yes" : "no");
+#endif
         err = display_refresh_full(&out_result->elapsed_ms);
         mode = DISPLAY_REFRESH_FULL;
     }

@@ -9,7 +9,6 @@
 #include "render_service.h"
 #include "status_service.h"
 
-static render_result_t g_boot_screen_result;
 #ifdef ESP_PLATFORM
 static render_result_t g_status_screen_result;
 static render_status_screen_t g_status_screen;
@@ -40,6 +39,7 @@ static void app_main_prepare_screen_compare_model(render_status_screen_t *screen
     }
 
     memset(&screen->snapshot.display, 0, sizeof(screen->snapshot.display));
+    memset(&screen->snapshot.environment, 0, sizeof(screen->snapshot.environment));
 
     if (!screen->snapshot.provisioning.ap_active) {
         memset(screen->snapshot.provisioning.ap_ssid, 0, sizeof(screen->snapshot.provisioning.ap_ssid));
@@ -153,16 +153,6 @@ void app_main(void) {
 #ifdef ESP_PLATFORM
     ESP_LOGI(TAG, "boot init complete");
 #endif
-
-    if (render_service_render_boot_screen(&g_boot_screen_result) == ERR_OK) {
-#ifdef ESP_PLATFORM
-        ESP_LOGI(TAG, "boot screen rendered and refreshed");
-#endif
-    } else {
-#ifdef ESP_PLATFORM
-        ESP_LOGW(TAG, "boot screen render failed");
-#endif
-    }
 
     if (app_controller_run() != ERR_OK) {
 #ifdef ESP_PLATFORM

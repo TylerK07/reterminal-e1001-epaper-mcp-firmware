@@ -30,6 +30,13 @@ typedef struct {
     uint32_t last_refresh_elapsed_ms;
 } display_status_t;
 
+typedef struct {
+    bool sensor_present;
+    bool reading_valid;
+    int16_t temperature_centi_f;
+    uint16_t humidity_centi_pct;
+} environment_status_t;
+
 typedef enum {
     PROVISIONING_STATE_UNPROVISIONED = 0,
     PROVISIONING_STATE_ACTIVE,
@@ -57,5 +64,6 @@ typedef struct {
     battery_status_t battery;
     wifi_status_t wifi;
     display_status_t display;
+    environment_status_t environment;
     provisioning_status_t provisioning;
 } device_status_snapshot_t;

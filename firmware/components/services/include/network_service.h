@@ -9,3 +9,5 @@ error_code_t network_service_connect_from_config(void);
 error_code_t network_service_disconnect(void);
 error_code_t network_service_scan(wifi_scan_results_t *out_results, uint32_t timeout_ms);
 error_code_t network_service_get_status(wifi_status_t *out_status);
+error_code_t network_service_start_discovery_from_config(void);
+error_code_t network_service_stop_discovery(void);

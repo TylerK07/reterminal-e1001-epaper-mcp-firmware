@@ -203,6 +203,7 @@ error_code_t provisioning_http_start(const provisioning_http_handlers_t *handler
         httpd_config_t config = HTTPD_DEFAULT_CONFIG();
         config.server_port = 80;
         config.max_uri_handlers = 4;
+        config.stack_size = 8192;
 
         if (httpd_start(&g_server, &config) != ESP_OK) {
             return ERR_INTERNAL;

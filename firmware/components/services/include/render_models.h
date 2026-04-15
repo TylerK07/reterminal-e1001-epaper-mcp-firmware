@@ -1,6 +1,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include "display_epaper.h"
 #include "enums.h"
 #include "status_models.h"
 #include "types.h"
@@ -12,6 +13,8 @@ typedef struct {
     char font[64];
     uint16_t size;
     char align[16];
+    display_foreground_color_t foreground_color;
+    display_background_mode_t background_mode;
     bool commit;
     display_refresh_mode_t refresh_mode;
 } render_text_req_t;

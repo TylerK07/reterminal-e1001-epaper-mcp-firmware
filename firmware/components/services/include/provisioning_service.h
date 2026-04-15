@@ -16,4 +16,5 @@ error_code_t provisioning_service_stop(void);
 bool provisioning_service_is_active(void);
 error_code_t provisioning_service_get_status(provisioning_status_t *out_status);
 error_code_t provisioning_service_submit(const provisioning_submission_t *submission);
+error_code_t provisioning_service_request_reset(void);
 error_code_t provisioning_service_reset(void);

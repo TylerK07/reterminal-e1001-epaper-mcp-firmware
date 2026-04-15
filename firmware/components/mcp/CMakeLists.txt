@@ -4,5 +4,5 @@ idf_component_register(
         "src/mcp_registry.c"
         "src/mcp_server.c"
     INCLUDE_DIRS "include"
-    REQUIRES core services
+    REQUIRES core services esp_http_server
 )

@@ -5,6 +5,7 @@
 #include "config_models.h"
 #include "config_service.h"
 #include "display_epaper.h"
+#include "environment_sensor.h"
 #include "network_service.h"
 #include "power.h"
 #include "provisioning_service.h"
@@ -78,6 +79,27 @@ error_code_t status_service_get_display_status(display_status_t *out_status) {
     return ERR_OK;
 }
 
+error_code_t status_service_get_environment_status(environment_status_t *out_status) {
+    platform_environment_status_t platform_status;
+    int32_t temperature_centi_f;
+
+    if (!out_status) {
+        return ERR_INVALID_ARGS;
+    }
+
+    memset(out_status, 0, sizeof(*out_status));
+    if (environment_sensor_get_status(&platform_status) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+
+    out_status->sensor_present = platform_status.sensor_present;
+    out_status->reading_valid = platform_status.reading_valid;
+    temperature_centi_f = 3200 + (((int32_t)platform_status.temperature_centi_c * 9) / 5);
+    out_status->temperature_centi_f = (int16_t)temperature_centi_f;
+    out_status->humidity_centi_pct = platform_status.humidity_centi_pct;
+    return ERR_OK;
+}
+
 error_code_t status_service_get_provisioning_status(provisioning_status_t *out_status) {
     return provisioning_service_get_status(out_status);
 }
@@ -98,6 +120,9 @@ error_code_t status_service_get_snapshot(device_status_snapshot_t *out_snapshot)
         return ERR_INTERNAL;
     }
     if (status_service_get_display_status(&out_snapshot->display) != ERR_OK) {
+        return ERR_INTERNAL;
+    }
+    if (status_service_get_environment_status(&out_snapshot->environment) != ERR_OK) {
         return ERR_INTERNAL;
     }
     if (status_service_get_provisioning_status(&out_snapshot->provisioning) != ERR_OK) {
@@ -122,7 +147,7 @@ error_code_t status_service_get_snapshot_json(char *buffer, uint32_t buffer_len,
     written = snprintf(
         buffer,
         buffer_len,
-        "{\"device\":{\"name\":\"%s\",\"model\":\"%s\"},\"battery\":{\"percent\":%u,\"policy\":%u},\"wifi\":{\"connected\":%s,\"ssid\":\"%s\",\"ip\":\"%s\"},\"provisioning\":{\"active\":%s}}",
+        "{\"device\":{\"name\":\"%s\",\"model\":\"%s\"},\"battery\":{\"percent\":%u,\"policy\":%u},\"wifi\":{\"connected\":%s,\"ssid\":\"%s\",\"ip\":\"%s\"},\"environment\":{\"sensor_present\":%s,\"reading_valid\":%s,\"temperature_centi_f\":%d,\"humidity_centi_pct\":%u},\"provisioning\":{\"active\":%s}}",
         snapshot.device.device_name,
         snapshot.device.model,
         (unsigned int)snapshot.battery.percent,
@@ -130,6 +155,10 @@ error_code_t status_service_get_snapshot_json(char *buffer, uint32_t buffer_len,
         snapshot.wifi.connected ? "true" : "false",
         snapshot.wifi.ssid,
         snapshot.wifi.ip_address,
+        snapshot.environment.sensor_present ? "true" : "false",
+        snapshot.environment.reading_valid ? "true" : "false",
+        (int)snapshot.environment.temperature_centi_f,
+        (unsigned int)snapshot.environment.humidity_centi_pct,
         snapshot.provisioning.ap_active ? "true" : "false");
     if (written < 0 || (uint32_t)written >= buffer_len) {
         return ERR_INVALID_ARGS;
